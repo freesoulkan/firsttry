@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>色混ぜラボ</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+/* Layout: one-screen lab bench — split comparison dish on top, match meter, paint pots, tool row.
+   A single neutral light-gray look on purpose: color judgment needs an unbiased surround. */
+:root {
+  --bg: #e6e4df;
+  --card: #f4f3ef;
+  --ink: #2a2926;
+  --muted: #6f6c66;
+  --line: #cfccc5;
+  --accent: #0f6f68;
+  --accent-ink: #ffffff;
+  --star: #e9a400;
+  --display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font);
+  -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+  overflow: hidden; touch-action: manipulation;
+}
+.app {
+  height: 100%; box-sizing: border-box; max-width: 520px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px max(12px, env(safe-area-inset-bottom, 0px));
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font-family: var(--display); font-size: 1.35rem; letter-spacing: 0.02em; line-height: 1.1; }
+.brand small { display: block; font-family: var(--font); font-size: 0.66rem; font-weight: 700; color: var(--muted); letter-spacing: 0.14em; }
+.level { display: flex; align-items: center; gap: 2px; background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.level span { min-width: 5.2em; text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
+.level button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 1.15rem; cursor: pointer; }
+.level button:disabled { opacity: 0.25; cursor: default; }
+
+.bench { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; }
+.goal { display: flex; gap: 14px; font-size: 0.85rem; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.goal b { color: var(--ink); }
+.dish-wrap { position: relative; width: min(68vw, 44vh, 300px); aspect-ratio: 1; max-width: 100%; }
+.dish {
+  position: absolute; inset: 0; border-radius: 50%; overflow: hidden; display: flex;
+  box-shadow: 0 0 0 10px var(--card), 0 0 0 11px var(--line), 0 14px 30px rgba(40, 36, 30, 0.18);
+}
+.dish .half { flex: 1; transition: background-color 0.45s ease; }
+.dish .mine { position: relative; }
+.dish .mine.empty {
+  background-color: var(--card);
+  background-image: repeating-linear-gradient(45deg, transparent 0 9px, rgba(0,0,0,0.05) 9px 18px);
+}
+.dish .mine.empty::after {
+  content: "からっぽ"; position: absolute; inset: 0; display: grid; place-items: center;
+  color: var(--muted); font-weight: 700; font-size: 0.9rem;
+}
+.dish::after { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--card); }
+.dish-labels { display: flex; width: min(68vw, 44vh, 300px); max-width: 100%; justify-content: space-around; font-weight: 900; font-size: 0.85rem; margin-top: 6px; }
+.dish-labels span:first-child::before { content: "◀ "; color: var(--muted); }
+.dish-labels span:last-child::after { content: " ▶"; color: var(--muted); }
+
+.meter { width: 100%; max-width: 360px; }
+.meter-top { display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.meter-top b { color: var(--ink); font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; position: relative; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--accent); border-radius: 5px; transition: width 0.4s ease, background-color 0.3s; }
+.bar::after { content: ""; position: absolute; left: 90%; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: 0.35; }
+.recipe { min-height: 1.6em; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; font-size: 0.82rem; font-weight: 700; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 5px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.chip i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.15); }
+.msg { min-height: 1.3em; text-align: center; font-weight: 700; font-size: 0.86rem; color: var(--accent); }
+
+.pots { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.pot {
+  border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; color: var(--ink);
+  display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 700; font-size: 0.8rem;
+}
+.pot .jar {
+  width: 100%; max-width: 62px; aspect-ratio: 1; border-radius: 40% 40% 46% 46%;
+  background: var(--c); position: relative;
+  box-shadow: inset 0 -8px 0 rgba(0,0,0,0.12), inset 6px 6px 0 rgba(255,255,255,0.28), 0 0 0 3px var(--card), 0 0 0 4px var(--line);
+  transition: transform 0.12s ease;
+}
+.pot:active .jar { transform: scale(0.92); }
+.pot:disabled { opacity: 0.4; cursor: default; }
+.pot.hinted .jar { box-shadow: inset 0 -8px 0 rgba(0,0,0,0.12), inset 6px 6px 0 rgba(255,255,255,0.28), 0 0 0 3px var(--card), 0 0 0 6px var(--star); }
+
+.tools { display: grid; grid-template-columns: 1fr 1fr 1fr 1.5fr; gap: 8px; }
+.tool {
+  border: 1px solid var(--line); border-radius: 14px; padding: 10px 4px; background: var(--card); color: var(--ink);
+  font: inherit; font-weight: 700; font-size: 0.82rem; cursor: pointer;
+}
+.tool:disabled { opacity: 0.4; cursor: default; }
+.tool.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 900; font-size: 0.95rem; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.drop { position: fixed; width: 18px; height: 22px; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; z-index: 30; pointer-events: none; box-shadow: inset -3px -3px 0 rgba(0,0,0,0.12); }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(42, 41, 38, 0.45);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card {
+  background: var(--card); border-radius: 24px; padding: 24px; width: 100%; max-width: 340px; box-sizing: border-box;
+  text-align: center; animation: cardIn 0.35s cubic-bezier(.2,1.4,.4,1) both;
+}
+@keyframes cardIn { from { transform: scale(0.75); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.stars { font-size: 2.4rem; letter-spacing: 0.1em; color: var(--line); }
+.stars .on { color: var(--star); }
+.card h2 { font-family: var(--display); font-weight: 400; margin: 4px 0 10px; font-size: 1.6rem; }
+.pair { display: flex; justify-content: center; gap: 0; margin: 0 auto 12px; width: 120px; height: 60px; border-radius: 30px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); }
+.pair div { flex: 1; }
+.facts { display: grid; grid-template-columns: auto auto; gap: 4px 14px; justify-content: center; text-align: left; font-size: 0.9rem; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 900; }
+.answer { font-size: 0.82rem; color: var(--muted); margin-bottom: 16px; }
+.card-btns { display: flex; gap: 8px; justify-content: center; }
+.cta { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 900; font-size: 1rem; cursor: pointer; }
+.cta.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--line); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dish .half, .bar i, .card, .pot .jar { transition: none !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="brand">色混ぜラボ<small>COLOR MIXING LAB</small></div>
+    <div class="level">
+      <button id="prev" aria-label="前のレベル">‹</button>
+      <span id="lvl">レベル 1</span>
+      <button id="next" aria-label="次のレベル">›</button>
+    </div>
+  </header>
+
+  <section class="bench">
+    <div class="goal"><span>目標 <b id="minDrops">2</b> 滴</span><span>使用 <b id="used">0</b> / 12 滴</span></div>
+    <div>
+      <div class="dish-wrap" id="dishWrap">
+        <div class="dish"><div class="half" id="target"></div><div class="half mine empty" id="mine"></div></div>
+      </div>
+      <div class="dish-labels"><span>お題</span><span>いまの色</span></div>
+    </div>
+    <div class="meter">
+      <div class="meter-top"><span>一致度</span><b id="pct">0%</b></div>
+      <div class="bar"><i id="barFill"></i></div>
+    </div>
+    <div class="recipe" id="recipe"></div>
+    <div class="msg" id="msg" aria-live="polite"></div>
+  </section>
+
+  <div class="pots" id="pots"></div>
+  <div class="tools">
+    <button class="tool" id="undo">1滴戻す</button>
+    <button class="tool" id="clear">空にする</button>
+    <button class="tool" id="hint">ヒント</button>
+    <button class="tool primary" id="judge">完成！</button>
+  </div>
+</div>
+
+<div class="overlay" id="result" hidden>
+  <div class="card">
+    <div class="stars" id="stars"><span>★</span><span>★</span><span>★</span></div>
+    <h2 id="resTitle">ぴったり！</h2>
+    <div class="pair"><div id="resTarget"></div><div id="resMine"></div></div>
+    <dl class="facts">
+      <dt>一致度</dt><dd id="resPct">100%</dd>
+      <dt>使った滴</dt><dd id="resDrops">3 滴（最少 3 滴）</dd>
+    </dl>
+    <div class="answer" id="resAnswer"></div>
+    <div class="card-btns">
+      <button class="cta ghost" id="retry">もう一度</button>
+      <button class="cta" id="nextBtn">次のレベルへ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const CAP = 12;
+  const PASS = 90;          // 一致度 90% 以上でクリア
+  const EXACT_DE = 1.0;     // ΔE がこれ未満なら「ぴったり」
+
+  /* ---------- paint model: RYB pigments mixed by ratio, then tinted with white / shaded with black ---------- */
+  // Colors at the corners of the RYB cube (a softened version of Gossett & Chen's mapping).
+  const CORNER = {
+    '000': [1, 1, 1],
+    '100': [0.89, 0.12, 0.13],   // red
+    '010': [0.99, 0.84, 0.10],   // yellow
+    '001': [0.13, 0.36, 0.76],   // blue
+    '110': [0.98, 0.50, 0.06],   // orange
+    '101': [0.47, 0.13, 0.53],   // purple
+    '011': [0.12, 0.60, 0.26],   // green
+    '111': [0.24, 0.15, 0.08]    // mud
+  };
+  function ryb2rgb(r, y, b) {
+    const out = [0, 0, 0];
+    for (const k in CORNER) {
+      const w = (k[0] === '1' ? r : 1 - r) * (k[1] === '1' ? y : 1 - y) * (k[2] === '1' ? b : 1 - b);
+      for (let i = 0; i < 3; i++) out[i] += w * CORNER[k][i];
+    }
+    return out;
+  }
+  const WHITE = [1, 1, 1], BLACK = [0.07, 0.07, 0.08];
+  // counts = [red, yellow, blue, white, black]
+  function mix(c) {
+    const [r, y, b, w, k] = c;
+    const C = r + y + b, N = C + w + k;
+    if (!N) return null;
+    const base = C ? ryb2rgb(r / Math.max(r, y, b), y / Math.max(r, y, b), b / Math.max(r, y, b)) : [0, 0, 0];
+    return [0, 1, 2].map(i => (base[i] * C + WHITE[i] * w + BLACK[i] * k) / N);
+  }
+  const POTS = [
+    { name: '赤', rgb: mix([1, 0, 0, 0, 0]) },
+    { name: '黄', rgb: mix([0, 1, 0, 0, 0]) },
+    { name: '青', rgb: mix([0, 0, 1, 0, 0]) },
+    { name: '白', rgb: WHITE },
+    { name: '黒', rgb: BLACK }
+  ];
+  const css = rgb => `rgb(${rgb.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',')})`;
+
+  /* ---------- color difference (CIE Lab, ΔE76) ---------- */
+  function lab(rgb) {
+    const [R, G, B] = rgb.map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    const X = (0.4124 * R + 0.3576 * G + 0.1805 * B) / 0.95047;
+    const Y = 0.2126 * R + 0.7152 * G + 0.0722 * B;
+    const Z = (0.0193 * R + 0.1192 * G + 0.9505 * B) / 1.08883;
+    const f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+    return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+  }
+  function dE(a, b) { const p = lab(a), q = lab(b); return Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); }
+  const matchPct = d => Math.max(0, Math.min(100, Math.round(100 - d * 1.4)));
+
+  /* ---------- level generation ---------- */
+  function rng(seed) {
+    return () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  // Every recipe up to CAP drops, precomputed once (sorted by drop count) for fast exact-match lookups.
+  let ALL = null;
+  function allRecipes() {
+    if (ALL) return ALL;
+    ALL = [];
+    for (let r = 0; r <= CAP; r++) for (let y = 0; r + y <= CAP; y++) for (let b = 0; r + y + b <= CAP; b++)
+      for (let w = 0; r + y + b + w <= CAP; w++) for (let k = 0; r + y + b + w + k <= CAP; k++) {
+        const n = r + y + b + w + k;
+        if (n) { const c = [r, y, b, w, k]; ALL.push({ n, c, lab: lab(mix(c)) }); }
+      }
+    ALL.sort((a, b) => a.n - b.n);
+    return ALL;
+  }
+  // Smallest recipe (fewest drops) that hits the target exactly.
+  function bestRecipe(target) {
+    const t = lab(target);
+    for (const e of allRecipes()) {
+      if (Math.hypot(e.lab[0] - t[0], e.lab[1] - t[1], e.lab[2] - t[2]) < EXACT_DE) return { n: e.n, c: e.c };
+    }
+    return null;
+  }
+  // Fewest drops a level must need, rising with the level.
+  const minDropsFor = lv => lv <= 2 ? 2 : lv <= 4 ? 3 : lv <= 7 ? 4 : lv <= 11 ? 5 : 6;
+  const levelCache = {};
+  function makeLevel(lv) {
+    if (levelCache[lv]) return levelCache[lv];
+    const r = rng(lv * 9973 + 17);
+    const pick = (lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
+    const prev = [];
+    for (let i = Math.max(1, lv - 3); i < lv; i++) prev.push(makeLevel(i).target);
+    let fallback = null;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const c = [0, 0, 0, 0, 0];
+      const prims = lv <= 4 ? 2 : lv <= 8 ? (r() < 0.75 ? 2 : 3) : (r() < 0.5 ? 2 : 3);
+      const maxC = lv <= 2 ? 2 : lv <= 6 ? 3 : 4;
+      const order = [0, 1, 2].sort(() => r() - 0.5);
+      for (let i = 0; i < prims; i++) c[order[i]] = pick(1, maxC);
+      if (lv >= 4 && r() < 0.45) c[3] = pick(1, lv >= 9 ? 3 : 2);
+      if (lv >= 6 && !c[3] && r() < 0.35) c[4] = pick(1, lv >= 10 ? 2 : 1);
+      const g = c.reduce((a, v) => gcd(a, v), 0);
+      const red = c.map(v => v / g);
+      const n = red.reduce((a, v) => a + v, 0);
+      if (n > CAP) continue;
+      const target = mix(red);
+      if (!fallback) fallback = { target, best: bestRecipe(target) || { n, c: red } };
+      const best = bestRecipe(target);
+      if (!best || best.n < minDropsFor(lv) || best.n > minDropsFor(lv) + (lv <= 4 ? 1 : lv <= 10 ? 3 : 6)) continue;
+      // Each level must look different from the previous three.
+      if (prev.some(q => dE(q, target) < 12)) continue;
+      // Avoid targets that look almost like a single pot.
+      if (POTS.some(p => dE(p.rgb, target) < 8)) continue;
+      return (levelCache[lv] = { target, best });
+    }
+    return (levelCache[lv] = fallback);
+  }
+
+  /* ---------- state ---------- */
+  const $ = id => document.getElementById(id);
+  let level = 1, maxLevel = 1, counts = [0, 0, 0, 0, 0], seq = [], hintUsed = false, stars = {};
+  let msgTimer = 0, lvl = null;
+  try {
+    const s = JSON.parse(localStorage.getItem('iromaze-lab') || '{}');
+    if (s.maxLevel) { maxLevel = s.maxLevel; level = s.level || 1; stars = s.stars || {}; }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem('iromaze-lab', JSON.stringify({ level, maxLevel, stars })); } catch (e) {} };
+
+  /* ---------- UI ---------- */
+  const potsEl = $('pots');
+  POTS.forEach((p, i) => {
+    const b = document.createElement('button');
+    b.className = 'pot';
+    b.style.setProperty('--c', css(p.rgb));
+    b.innerHTML = `<span class="jar"></span>${p.name}`;
+    b.setAttribute('aria-label', `${p.name}を1滴入れる`);
+    b.onclick = () => addDrop(i, b);
+    potsEl.appendChild(b);
+  });
+
+  function say(t) { $('msg').textContent = t; clearTimeout(msgTimer); msgTimer = setTimeout(() => { $('msg').textContent = ''; }, 2600); }
+
+  function current() { return mix(counts); }
+  function currentPct() { const m = current(); return m ? matchPct(dE(m, lvl.target)) : 0; }
+
+  function update() {
+    const m = current(), used = seq.length;
+    $('lvl').textContent = `レベル ${level}`;
+    $('prev').disabled = level <= 1;
+    $('next').disabled = level >= maxLevel;
+    $('target').style.backgroundColor = css(lvl.target);
+    $('minDrops').textContent = lvl.best.n;
+    $('used').textContent = used;
+    const mine = $('mine');
+    mine.classList.toggle('empty', !m);
+    mine.style.backgroundColor = m ? css(m) : '';
+    const pct = currentPct();
+    $('pct').textContent = pct + '%';
+    $('barFill').style.width = pct + '%';
+    $('barFill').style.backgroundColor = pct >= PASS ? 'var(--accent)' : 'var(--muted)';
+    $('recipe').innerHTML = counts.map((n, i) => n ? `<span class="chip" style="--c:${css(POTS[i].rgb)}"><i></i>${POTS[i].name} ×${n}</span>` : '').join('');
+    potsEl.querySelectorAll('.pot').forEach(b => { b.disabled = used >= CAP; });
+    $('undo').disabled = !used;
+    $('clear').disabled = !used;
+    $('judge').disabled = !used;
+  }
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function addDrop(i, btn) {
+    if (seq.length >= CAP) return;
+    counts[i]++; seq.push(i);
+    if (!reduced) {
+      const from = btn.querySelector('.jar').getBoundingClientRect();
+      const to = $('dishWrap').getBoundingClientRect();
+      const d = document.createElement('div');
+      d.className = 'drop';
+      d.style.background = css(POTS[i].rgb);
+      d.style.left = (from.left + from.width / 2 - 9) + 'px';
+      d.style.top = (from.top) + 'px';
+      document.body.appendChild(d);
+      const dx = to.left + to.width * 0.75 - (from.left + from.width / 2);
+      const dy = to.top + to.height / 2 - from.top;
+      d.animate([
+        { transform: 'translate(0,0) scale(1)' },
+        { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 60}px) scale(1.1)`, offset: 0.45 },
+        { transform: `translate(${dx}px, ${dy}px) scale(0.4)`, opacity: 0.6 }
+      ], { duration: 420, easing: 'ease-in' }).finished.then(() => { d.remove(); update(); });
+    } else update();
+    try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
+  }
+
+  $('undo').onclick = () => { if (!seq.length) return; counts[seq.pop()]--; update(); };
+  $('clear').onclick = () => { counts = [0, 0, 0, 0, 0]; seq = []; update(); };
+  $('hint').onclick = () => {
+    hintUsed = true;
+    const used = lvl.best.c.map((n, i) => n ? i : -1).filter(i => i >= 0);
+    potsEl.querySelectorAll('.pot').forEach((b, i) => b.classList.toggle('hinted', used.includes(i)));
+    say(`使う絵の具は ${used.map(i => POTS[i].name).join('・')}（ヒントを使うと最高★2）`);
+  };
+  $('judge').onclick = () => {
+    const m = current(); if (!m) return;
+    const d = dE(m, lvl.target), pct = matchPct(d);
+    if (pct < PASS) { say(`一致度 ${pct}%。${PASS}% 以上でクリアです`); return; }
+    const exact = d < EXACT_DE;
+    let s = exact ? (seq.length <= lvl.best.n ? 3 : 2) : 1;
+    if (hintUsed) s = Math.min(s, 2);
+    stars[level] = Math.max(stars[level] || 0, s);
+    if (level >= maxLevel) maxLevel = level + 1;
+    save();
+    $('stars').innerHTML = [0, 1, 2].map(i => `<span class="${i < s ? 'on' : ''}">★</span>`).join('');
+    $('resTitle').textContent = s === 3 ? 'かんぺき！' : exact ? 'ぴったり！' : 'おしい、クリア！';
+    $('resTarget').style.backgroundColor = css(lvl.target);
+    $('resMine').style.backgroundColor = css(m);
+    $('resPct').textContent = pct + '%';
+    $('resDrops').textContent = `${seq.length} 滴（最少 ${lvl.best.n} 滴）`;
+    $('resAnswer').textContent = '答えの一例： ' + lvl.best.c.map((n, i) => n ? `${POTS[i].name}×${n}` : '').filter(Boolean).join('  ');
+    $('result').hidden = false;
+    $('nextBtn').focus();
+  };
+  $('retry').onclick = () => startLevel(level);
+  $('nextBtn').onclick = () => startLevel(level + 1);
+  $('prev').onclick = () => { if (level > 1) startLevel(level - 1); };
+  $('next').onclick = () => { if (level < maxLevel) startLevel(level + 1); };
+
+  function startLevel(lv) {
+    level = lv; lvl = makeLevel(lv);
+    counts = [0, 0, 0, 0, 0]; seq = []; hintUsed = false;
+    potsEl.querySelectorAll('.pot').forEach(b => b.classList.remove('hinted'));
+    $('result').hidden = true;
+    $('msg').textContent = '';
+    save();
+    update();
+  }
+
+  /* ---------- boot (keeps progress across live updates in the viewer) ---------- */
+  function start(data) {
+    if (data && data.counts) {
+      level = data.level; maxLevel = data.maxLevel; stars = data.stars || {};
+      lvl = makeLevel(level); counts = data.counts; seq = data.seq; hintUsed = data.hintUsed;
+      update();
+    } else startLevel(level);
+  }
+  window.claude?.hot?.snapshot?.(() => ({ level, maxLevel, stars, counts, seq, hintUsed }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
