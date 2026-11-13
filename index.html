@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>しずくソート</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+<style>
+/* Layout: one-screen game — HUD on top, bottle grid centered, tool bar pinned at the bottom. */
+:root {
+  --bg: #1c2547;
+  --bg-glow: #2d3a6e;
+  --fg: #eef1ff;
+  --muted: #9aa5d4;
+  --glass: rgba(220, 230, 255, 0.10);
+  --glass-edge: rgba(220, 230, 255, 0.55);
+  --accent: #ffb547;
+  --accent-ink: #2a1a00;
+  --panel: rgba(12, 17, 40, 0.55);
+  --font: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: radial-gradient(120% 70% at 50% 35%, var(--bg-glow), var(--bg) 70%) fixed, var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  touch-action: manipulation;
+}
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px max(12px, env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
+  max-width: 640px;
+  margin: 0 auto;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.brand { font-weight: 900; font-size: 1.3rem; letter-spacing: 0.04em; }
+.brand small { display: block; font-size: 0.62rem; font-weight: 500; color: var(--muted); letter-spacing: 0.1em; white-space: nowrap; }
+.level {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--panel); border-radius: 999px; padding: 4px;
+}
+.head-right { display: flex; align-items: center; gap: 8px; }
+.sound {
+  width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--panel); color: var(--fg);
+  display: grid; place-items: center; cursor: pointer;
+}
+.sound .mute { display: none; }
+.sound[aria-pressed="false"] { color: var(--muted); }
+.sound[aria-pressed="false"] .waves { display: none; }
+.sound[aria-pressed="false"] .mute { display: inline; }
+.sound:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.level span { min-width: 4.8em; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.level button {
+  width: 32px; height: 32px; border-radius: 50%; border: 0;
+  background: transparent; color: var(--fg); font: inherit; font-size: 1.1rem; cursor: pointer;
+}
+.level button:disabled { opacity: 0.25; cursor: default; }
+.stats {
+  margin-top: 6px; color: var(--muted); font-size: 0.85rem;
+  display: flex; justify-content: space-between; font-variant-numeric: tabular-nums;
+}
+.msg { min-height: 1.4em; text-align: center; color: var(--accent); font-weight: 700; font-size: 0.9rem; margin-top: 4px; }
+
+main { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.board {
+  display: grid;
+  gap: var(--rowgap, 28px) var(--gap, 14px);
+  justify-content: center;
+  padding-top: 24px;
+}
+.tube {
+  --tw: 48px;
+  width: var(--tw);
+  height: calc(var(--tw) * 3.6);
+  position: relative;
+  cursor: pointer;
+  transition: transform 0.18s ease;
+  will-change: transform;
+}
+.tube .glass {
+  position: absolute; inset: 0;
+  border: 2.5px solid var(--glass-edge);
+  border-top-width: 0;
+  border-radius: 6px 6px calc(var(--tw) / 2) calc(var(--tw) / 2);
+  background: linear-gradient(90deg, rgba(255,255,255,0.05), rgba(255,255,255,0.16) 30%, rgba(255,255,255,0.03) 55%, rgba(255,255,255,0.08));
+  overflow: hidden;
+  box-shadow: inset 0 -6px 14px rgba(0,0,0,0.25);
+}
+.tube .rim {
+  position: absolute; left: -5px; right: -5px; top: -4px; height: 8px;
+  border: 2.5px solid var(--glass-edge); border-radius: 6px; background: var(--glass);
+  box-sizing: border-box;
+}
+.liquid {
+  position: absolute; left: 0; right: 0; bottom: 0; top: 14%;
+  display: flex; flex-direction: column-reverse;
+}
+.slot { flex: 1; position: relative; }
+.slot.c { background: var(--c); box-shadow: inset 6px 0 8px -4px rgba(255,255,255,0.35), inset -6px 0 10px -4px rgba(0,0,0,0.3); }
+.slot.c.top::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -3px; height: 6px;
+  background: var(--c); filter: brightness(1.18); border-radius: 50%;
+}
+.slot.fill { animation: fillUp 0.32s ease-out both; transform-origin: bottom; }
+@keyframes fillUp { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.tube.sel { transform: translateY(-16px); }
+.tube.hint .glass, .tube.hint-from .glass { border-color: var(--accent); box-shadow: 0 0 16px var(--accent); }
+.tube.hint-from { transform: translateY(-8px); }
+.tube.hint-from::before {
+  content: "↓"; position: absolute; left: 50%; top: -34px; transform: translateX(-50%);
+  color: var(--accent); font-weight: 900; font-size: 1.1rem;
+}
+.tube.done .rim { background: var(--accent); border-color: var(--accent); }
+.tube.done::after {
+  content: "✓"; position: absolute; left: 50%; top: -30px; transform: translateX(-50%);
+  color: var(--accent); font-weight: 900; font-size: 1rem;
+  animation: pop 0.4s ease-out both;
+}
+.tube.shake { animation: shake 0.3s; }
+@keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+@keyframes pop { from { transform: translateX(-50%) scale(0); } to { transform: translateX(-50%) scale(1); } }
+.tube:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 8px; }
+
+.stream {
+  position: fixed; width: 6px; border-radius: 3px; z-index: 30; pointer-events: none;
+  transform-origin: top; animation: streamIn 0.12s ease-out both;
+}
+@keyframes streamIn { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+footer { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tool {
+  border: 0; border-radius: 14px; padding: 10px 4px 8px;
+  background: var(--panel); color: var(--fg); font: inherit; font-weight: 700; font-size: 0.8rem;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+}
+.tool b { font-size: 1.3rem; line-height: 1; }
+.tool:disabled { opacity: 0.35; cursor: default; }
+.tool:focus-visible, .level button:focus-visible, .cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 12, 30, 0.6); backdrop-filter: blur(3px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card {
+  background: var(--bg); border: 2px solid var(--glass-edge); border-radius: 24px;
+  padding: 28px 32px; text-align: center; max-width: 320px; width: 100%; box-sizing: border-box;
+  animation: cardIn 0.35s cubic-bezier(.2,1.4,.4,1) both;
+}
+@keyframes cardIn { from { transform: scale(0.7); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.card h2 { margin: 0 0 6px; font-size: 2rem; font-weight: 900; color: var(--accent); }
+.card p { margin: 0 0 20px; color: var(--muted); }
+.cta {
+  border: 0; border-radius: 999px; padding: 12px 28px; background: var(--accent); color: var(--accent-ink);
+  font: inherit; font-weight: 900; font-size: 1.05rem; cursor: pointer;
+}
+canvas#fx { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tube, .slot.fill, .card, .tube.done::after { transition: none !important; animation: none !important; }
+}
+</style>
+<style id="playguard-css">
+/* Full-screen start screen and touch lock, shared by all games. */
+html, body { overscroll-behavior: none; }
+body { -webkit-touch-callout: none; }
+.pg-start {
+  position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: var(--bg); color: inherit; text-align: center; cursor: pointer;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px));
+}
+.pg-start h1 { margin: 0; font-size: 2rem; font-weight: 900; letter-spacing: 0.04em; text-wrap: balance; }
+.pg-start .pg-go {
+  border: 0; border-radius: 999px; padding: 16px 36px; background: var(--accent); color: var(--accent-ink);
+  font: inherit; font-weight: 900; font-size: 1.15rem; cursor: pointer; animation: pg-pulse 1.6s ease-in-out infinite;
+}
+.pg-start p { margin: 0; max-width: 30em; font-size: 0.85rem; opacity: 0.7; line-height: 1.6; }
+@keyframes pg-pulse { 50% { transform: scale(1.05); } }
+.pg-fs {
+  margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 0; flex: none;
+  background: rgba(128, 128, 128, 0.18); color: inherit; display: grid; place-items: center; cursor: pointer;
+}
+.pg-fs:focus-visible, .pg-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 120;
+  background: rgba(20, 20, 24, 0.88); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
+  pointer-events: none; white-space: nowrap;
+}
+@media (max-width: 440px) {
+  header { gap: 8px; }
+  header .brand { font-size: 1.1rem; white-space: nowrap; }
+  header .level span { min-width: 4.2em; }
+  header .level button { width: 28px; }
+  .pg-fs, .sound { width: 36px; height: 36px; }
+  .head-right { gap: 6px; }
+  header .brand small { letter-spacing: 0.06em; }
+}
+@media (prefers-reduced-motion: reduce) { .pg-start .pg-go { animation: none; } }
+</style>
+</head>
+<body>
+<div class="pg-start" id="pgStart" role="dialog" aria-label="スタート">
+  <h1 id="pgTitle"></h1>
+  <button class="pg-go" id="pgGo">タップしてはじめる</button>
+  <p id="pgTip"></p>
+</div>
+<div class="app">
+  <header>
+    <div class="brand">しずくソート<small>COLOR SORT PUZZLE</small></div>
+    <div class="head-right">
+      <button class="sound" id="sound" aria-label="効果音" aria-pressed="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/><path class="waves" d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path class="mute" d="M16.5 9.5l5 5m0-5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <div class="level">
+        <button id="prev" aria-label="前のレベル">‹</button>
+        <span id="lvl">レベル 1</span>
+        <button id="next" aria-label="次のレベル">›</button>
+      </div>
+    </div>
+  </header>
+  <div class="stats"><span id="colors">3 色</span><span id="moves">0 手</span></div>
+  <div class="msg" id="msg" aria-live="polite"></div>
+  <main><div class="board" id="board"></div></main>
+  <footer>
+    <button class="tool" id="undo"><b>↶</b>戻す</button>
+    <button class="tool" id="hintBtn"><b>?</b>ヒント</button>
+    <button class="tool" id="add"><b>＋</b>瓶を追加</button>
+    <button class="tool" id="restart"><b>⟲</b>やり直し</button>
+  </footer>
+</div>
+<div class="overlay" id="win" hidden>
+  <div class="card">
+    <h2>クリア！</h2>
+    <p id="winText">12 手で完成</p>
+    <button class="cta" id="nextBtn">次のレベルへ</button>
+  </div>
+</div>
+<canvas id="fx"></canvas>
+
+<script>
+(() => {
+  const CAP = 4;
+  const PALETTE = [
+    '#e8433a', '#2f6fe0', '#f5cf2c', '#1f9e57', '#f28a1b', '#9150dc',
+    '#ef6fb4', '#28b8b2', '#eef0f4', '#8fd13b', '#8a5a35', '#3a3f55'
+  ];
+  const $ = id => document.getElementById(id);
+  const board = $('board');
+
+  let level = 1, maxLevel = 1;
+  let tubes = [], history = [], moves = 0, extraUsed = false;
+  let selected = -1, busy = false, hintTimer = 0, msgTimer = 0;
+
+  try {
+    const s = JSON.parse(localStorage.getItem('shizuku-sort') || '{}');
+    if (s.maxLevel) { maxLevel = s.maxLevel; level = s.level || s.maxLevel; }
+  } catch (e) {}
+  function save() {
+    try { localStorage.setItem('shizuku-sort', JSON.stringify({ level, maxLevel })); } catch (e) {}
+  }
+
+  /* ---------- sound effects (synthesized with Web Audio, no audio files) ---------- */
+  const Sound = (() => {
+    let ctx = null, on = true;
+    try { on = localStorage.getItem('shizuku-sound') !== 'off'; } catch (e) {}
+    function ac() {
+      if (!ctx) {
+        const C = window.AudioContext || window.webkitAudioContext;
+        if (!C) return null;
+        ctx = new C();
+      }
+      if (ctx.state === 'suspended') ctx.resume();
+      return ctx;
+    }
+    function tone(freq, at, dur, { type = 'sine', vol = 0.2, slide = 1 } = {}) {
+      if (!on) return;
+      const c = ac(); if (!c) return;
+      const t = c.currentTime + at;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (slide !== 1) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(c.destination);
+      o.start(t); o.stop(t + dur + 0.03);
+    }
+    return {
+      get on() { return on; },
+      toggle() {
+        on = !on;
+        try { localStorage.setItem('shizuku-sound', on ? 'on' : 'off'); } catch (e) {}
+        if (on) this.select();
+        return on;
+      },
+      select() { tone(620, 0, 0.09, { type: 'triangle', vol: 0.16, slide: 1.35 }); },
+      deselect() { tone(560, 0, 0.08, { type: 'triangle', vol: 0.12, slide: 0.75 }); },
+      invalid() { tone(190, 0, 0.11, { type: 'square', vol: 0.05 }); tone(150, 0.09, 0.15, { type: 'square', vol: 0.05 }); },
+      // Glugging bloops whose pitch climbs as the bottle fills, like water in a real glass.
+      pour(units, filledBefore, total = 0.38) {
+        const n = units * 3;
+        for (let i = 0; i < n; i++) {
+          const level = (filledBefore + (i + 1) / 3) / CAP;
+          tone(260 + level * 520 + Math.random() * 40, (i / n) * total, 0.09, { vol: 0.17, slide: 1.7 });
+        }
+      },
+      done() { [784, 988, 1319].forEach((f, i) => tone(f, 0.05 + i * 0.07, 0.28, { type: 'triangle', vol: 0.13 })); },
+      win() {
+        [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.1, 0.38, { type: 'triangle', vol: 0.15 }));
+        tone(1568, 0.55, 0.7, { vol: 0.08 });
+      },
+      undo() { tone(480, 0, 0.1, { vol: 0.13, slide: 0.6 }); },
+      add() { tone(392, 0, 0.1, { type: 'triangle', vol: 0.14 }); tone(587, 0.08, 0.16, { type: 'triangle', vol: 0.14 }); },
+      hint() { tone(880, 0, 0.12, { vol: 0.1 }); tone(1175, 0.1, 0.18, { vol: 0.1 }); }
+    };
+  })();
+
+  /* ---------- rules ---------- */
+  const top = t => t[t.length - 1];
+  function topRun(t) {
+    if (!t.length) return 0;
+    const c = top(t); let n = 0;
+    for (let i = t.length - 1; i >= 0 && t[i] === c; i--) n++;
+    return n;
+  }
+  const canPour = (a, b) => a.length > 0 && b.length < CAP && (!b.length || top(b) === top(a));
+  function pour(a, b) {
+    const n = Math.min(topRun(a), CAP - b.length);
+    for (let i = 0; i < n; i++) b.push(a.pop());
+    return n;
+  }
+  const isDone = t => t.length === CAP && t.every(v => v === t[0]);
+  const isWon = ts => ts.every(t => t.length === 0 || isDone(t));
+  const clone = ts => ts.map(t => t.slice());
+
+  /* ---------- solver (DFS, used for level checks and hints) ---------- */
+  const key = ts => ts.map(t => t.join(',')).sort().join('|');
+  function solve(start, limit = 150000, avoid = []) {
+    const seen = new Set(avoid.map(key)); const path = []; let nodes = 0;
+    function dfs(ts) {
+      if (isWon(ts)) return true;
+      if (++nodes > limit) throw new Error('limit');
+      const k = key(ts);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      const cand = [];
+      for (let i = 0; i < ts.length; i++) {
+        const a = ts[i];
+        if (!a.length || isDone(a)) continue;
+        const run = topRun(a), uniform = run === a.length;
+        let emptyTried = false;
+        for (let j = 0; j < ts.length; j++) {
+          if (i === j) continue;
+          const b = ts[j];
+          if (b.length >= CAP) continue;
+          if (!b.length) {
+            if (uniform || emptyTried) continue;
+            emptyTried = true; cand.push([i, j, 0]);
+          } else if (top(b) === top(a)) {
+            cand.push([i, j, (CAP - b.length >= run ? 2 : 1) + (topRun(b) === b.length ? 1 : 0)]);
+          }
+        }
+      }
+      cand.sort((x, y) => y[2] - x[2]);
+      for (const [i, j] of cand) {
+        const nt = clone(ts); pour(nt[i], nt[j]);
+        path.push([i, j]);
+        if (dfs(nt)) return true;
+        path.pop();
+      }
+      return false;
+    }
+    try { const ok = dfs(start); return { ok, path: ok ? path.slice() : null }; }
+    catch (e) { return { ok: false, unknown: true }; }
+  }
+
+  /* ---------- level generation (seeded, so each level is always the same) ---------- */
+  function rng(seed) {
+    return () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const colorsFor = lv => Math.min(3 + Math.floor((lv - 1) / 2), PALETTE.length);
+  function generate(lv) {
+    const k = colorsFor(lv);
+    let fallback = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const r = rng(lv * 7919 + attempt * 104729);
+      const units = [];
+      for (let c = 0; c < k; c++) for (let i = 0; i < CAP; i++) units.push(c);
+      for (let i = units.length - 1; i > 0; i--) {
+        const j = Math.floor(r() * (i + 1)); [units[i], units[j]] = [units[j], units[i]];
+      }
+      const ts = [];
+      for (let i = 0; i < k; i++) ts.push(units.slice(i * CAP, (i + 1) * CAP));
+      if (ts.some(t => topRun(t) >= 3)) continue;
+      ts.push([], []);
+      fallback = ts;
+      const res = solve(ts);
+      if (res.ok || res.unknown) return ts;
+    }
+    return fallback;
+  }
+
+  /* ---------- rendering ---------- */
+  function layout() {
+    const n = tubes.length;
+    let cols = n <= 6 ? n : Math.ceil(n / 2);
+    if (cols > 7) cols = Math.ceil(n / 3);
+    const rows = Math.ceil(n / cols);
+    const availW = Math.min(window.innerWidth, 640) - 32;
+    const availH = board.parentElement.clientHeight - 24;
+    const gap = Math.max(8, Math.min(18, availW / cols * 0.22));
+    let tw = (availW - gap * (cols - 1)) / cols;
+    const rowGap = 34;
+    tw = Math.min(tw, 56, (availH - rowGap * (rows - 1)) / rows / 3.6);
+    board.style.gridTemplateColumns = `repeat(${cols}, auto)`;
+    board.style.setProperty('--gap', gap + 'px');
+    board.style.setProperty('--rowgap', rowGap + 'px');
+    board.querySelectorAll('.tube').forEach(el => el.style.setProperty('--tw', Math.floor(tw) + 'px'));
+  }
+
+  function paintTube(el, t, fillFrom = -1) {
+    const slots = el.querySelectorAll('.slot');
+    slots.forEach((s, i) => {
+      s.className = 'slot';
+      s.style.removeProperty('--c');
+      s.style.animationDelay = '';
+      if (i < t.length) {
+        s.classList.add('c');
+        s.style.setProperty('--c', PALETTE[t[i]]);
+        if (i === t.length - 1) s.classList.add('top');
+        if (fillFrom >= 0 && i >= fillFrom) {
+          s.classList.add('fill');
+          s.style.animationDelay = ((i - fillFrom) * 0.12) + 's';
+        }
+      }
+    });
+    el.classList.toggle('done', isDone(t));
+  }
+
+  function render() {
+    board.innerHTML = '';
+    tubes.forEach((t, i) => {
+      const el = document.createElement('div');
+      el.className = 'tube';
+      el.tabIndex = 0;
+      el.dataset.i = i;
+      el.setAttribute('role', 'button');
+      el.setAttribute('aria-label', `瓶 ${i + 1}`);
+      el.innerHTML = '<div class="glass"><div class="liquid">' +
+        '<div class="slot"></div>'.repeat(CAP) + '</div></div><div class="rim"></div>';
+      paintTube(el, t);
+      if (i === selected) el.classList.add('sel');
+      el.addEventListener('click', () => tap(i));
+      el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tap(i); } });
+      board.appendChild(el);
+    });
+    layout();
+    hud();
+  }
+
+  function hud() {
+    $('lvl').textContent = `レベル ${level}`;
+    $('moves').textContent = `${moves} 手`;
+    $('colors').textContent = `${colorsFor(level)} 色`;
+    $('prev').disabled = level <= 1;
+    $('next').disabled = level >= maxLevel;
+    $('undo').disabled = !history.length;
+    $('add').disabled = extraUsed;
+  }
+
+  function say(text) {
+    $('msg').textContent = text;
+    clearTimeout(msgTimer);
+    msgTimer = setTimeout(() => { $('msg').textContent = ''; }, 2200);
+  }
+
+  const tubeEl = i => board.querySelector(`.tube[data-i="${i}"]`);
+  function clearHint() {
+    clearTimeout(hintTimer);
+    board.querySelectorAll('.hint, .hint-from').forEach(e => e.classList.remove('hint', 'hint-from'));
+  }
+
+  /* ---------- interaction ---------- */
+  function tap(i) {
+    if (busy) return;
+    clearHint();
+    if (selected === -1) {
+      if (!tubes[i].length || isDone(tubes[i])) return;
+      selected = i;
+      tubeEl(i).classList.add('sel');
+      Sound.select();
+      return;
+    }
+    if (selected === i) {
+      tubeEl(i).classList.remove('sel');
+      selected = -1;
+      Sound.deselect();
+      return;
+    }
+    const from = selected;
+    if (!canPour(tubes[from], tubes[i])) {
+      const el = tubeEl(i);
+      el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+      Sound.invalid();
+      tubeEl(from).classList.remove('sel');
+      selected = -1;
+      // allow picking the tapped tube instead
+      if (tubes[i].length && !isDone(tubes[i])) { selected = i; tubeEl(i).classList.add('sel'); }
+      return;
+    }
+    selected = -1;
+    doPour(from, i);
+  }
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  async function doPour(from, to) {
+    busy = true;
+    const sEl = tubeEl(from), tEl = tubeEl(to);
+    const color = PALETTE[top(tubes[from])];
+    const before = tubes[to].length;
+    history.push(clone(tubes));
+    if (history.length > 200) history.shift();
+
+    if (!reduced) {
+      const s = sEl.getBoundingClientRect(), t = tEl.getBoundingClientRect();
+      const h = s.height;
+      const right = (t.left + t.width / 2) >= (s.left + s.width / 2);
+      const deg = right ? 68 : -68, rad = deg * Math.PI / 180;
+      const mouthX = t.left + t.width / 2, mouthY = t.top - 14;
+      const cx = mouthX - (h / 2) * Math.sin(rad);
+      const cy = mouthY + (h / 2) * Math.cos(rad);
+      const dx = cx - (s.left + s.width / 2), dy = cy - (s.top + h / 2);
+      sEl.style.zIndex = 20;
+      sEl.classList.remove('sel');
+      const go = sEl.animate([
+        { transform: 'translateY(-16px)' },
+        { transform: `translate(${dx}px, ${dy}px) rotate(${deg}deg)` }
+      ], { duration: 320, easing: 'ease-in-out', fill: 'forwards' });
+      await go.finished;
+
+      const stream = document.createElement('div');
+      stream.className = 'stream';
+      stream.style.background = color;
+      stream.style.left = (mouthX - 3) + 'px';
+      stream.style.top = mouthY + 'px';
+      const liquidTop = t.top + t.height * 0.14;
+      const fillTop = t.bottom - (t.bottom - liquidTop) * (before / CAP);
+      stream.style.height = Math.max(10, fillTop - mouthY) + 'px';
+      document.body.appendChild(stream);
+
+      Sound.pour(pour(tubes[from], tubes[to]), before);
+      moves++;
+      paintTube(tEl, tubes[to], before);
+      paintTube(sEl, tubes[from]);
+      buzz(12);
+      await wait(380);
+      stream.remove();
+
+      const back = sEl.animate([
+        { transform: `translate(${dx}px, ${dy}px) rotate(${deg}deg)` },
+        { transform: 'none' }
+      ], { duration: 280, easing: 'ease-in-out', fill: 'forwards' });
+      go.cancel();
+      await back.finished;
+      back.cancel();
+      sEl.style.zIndex = '';
+    } else {
+      Sound.pour(pour(tubes[from], tubes[to]), before, 0.2);
+      moves++;
+    }
+    render();
+    const won = isWon(tubes);
+    if (isDone(tubes[to])) { buzz([10, 40, 10]); if (!won) Sound.done(); }
+    busy = false;
+    if (won) win();
+  }
+
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  function buzz(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} }
+
+  function win() {
+    if (level >= maxLevel) maxLevel = level + 1;
+    save();
+    $('winText').textContent = `${moves} 手で完成`;
+    $('win').hidden = false;
+    Sound.win();
+    confetti();
+    $('nextBtn').focus();
+  }
+
+  function startLevel(lv) {
+    level = lv;
+    tubes = generate(lv);
+    history = []; moves = 0; extraUsed = false; selected = -1;
+    $('win').hidden = true;
+    clearHint();
+    save();
+    render();
+  }
+
+  /* ---------- tools ---------- */
+  $('undo').onclick = () => {
+    if (busy || !history.length) return;
+    tubes = history.pop();
+    Sound.undo();
+    moves = Math.max(0, moves - 1);
+    selected = -1; clearHint();
+    render();
+  };
+  $('restart').onclick = () => { if (!busy) startLevel(level); };
+  $('add').onclick = () => {
+    if (busy || extraUsed) return;
+    extraUsed = true;
+    history = history.map(h => (h.push([]), h));
+    tubes.push([]);
+    Sound.add();
+    selected = -1;
+    render();
+    say('空の瓶を 1 本追加しました');
+  };
+  $('hintBtn').onclick = () => {
+    if (busy) return;
+    clearHint();
+    // Never suggest a move that leads back to a position already played.
+    let res = solve(clone(tubes), 120000, history);
+    if (!res.ok && !res.unknown) res = solve(clone(tubes), 120000);
+    if (!res.ok || !res.path.length) {
+      say(res.unknown ? 'ヒントを探しきれませんでした' : 'この状態からは解けません。戻すか瓶を追加してみて');
+      return;
+    }
+    const [a, b] = res.path[0];
+    if (selected !== -1) { tubeEl(selected).classList.remove('sel'); selected = -1; }
+    tubeEl(a).classList.add('hint-from');
+    tubeEl(b).classList.add('hint');
+    Sound.hint();
+    hintTimer = setTimeout(clearHint, 2500);
+    say(`↓ の瓶を、光っている瓶へ注いでみて（あと約 ${res.path.length} 手）`);
+  };
+  const soundBtn = $('sound');
+  soundBtn.setAttribute('aria-pressed', String(Sound.on));
+  soundBtn.onclick = () => soundBtn.setAttribute('aria-pressed', String(Sound.toggle()));
+  $('prev').onclick = () => { if (!busy && level > 1) startLevel(level - 1); };
+  $('next').onclick = () => { if (!busy && level < maxLevel) startLevel(level + 1); };
+  $('nextBtn').onclick = () => startLevel(level + 1);
+  window.addEventListener('resize', layout);
+
+  /* ---------- confetti ---------- */
+  function confetti() {
+    if (reduced) return;
+    const cv = $('fx'), ctx = cv.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    ctx.scale(dpr, dpr);
+    const ps = Array.from({ length: 120 }, () => ({
+      x: innerWidth / 2, y: innerHeight * 0.4,
+      vx: (Math.random() - 0.5) * 12, vy: -Math.random() * 12 - 4,
+      r: Math.random() * 5 + 3, c: PALETTE[Math.floor(Math.random() * 10)],
+      a: Math.random() * Math.PI
+    }));
+    let f = 0;
+    (function step() {
+      ctx.clearRect(0, 0, innerWidth, innerHeight);
+      ps.forEach(p => {
+        p.vy += 0.35; p.x += p.vx; p.y += p.vy; p.a += 0.15;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+        ctx.fillStyle = p.c; ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+        ctx.restore();
+      });
+      if (++f < 120) requestAnimationFrame(step);
+      else ctx.clearRect(0, 0, innerWidth, innerHeight);
+    })();
+  }
+
+  /* ---------- boot (keeps progress across live updates in the viewer) ---------- */
+  function start(data) {
+    if (data && data.tubes) {
+      level = data.level; maxLevel = data.maxLevel; tubes = data.tubes;
+      history = data.history || []; moves = data.moves || 0; extraUsed = !!data.extraUsed;
+      render();
+    } else {
+      startLevel(level);
+    }
+  }
+  window.claude?.hot?.snapshot?.(() => ({ level, maxLevel, tubes, history, moves, extraUsed }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+<script id="playguard-js">
+(() => {
+  const root = document.documentElement;
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+  const canFs = !!req && (document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const isTop = (() => { try { return window.top === window; } catch (e) { return false; } })();
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+  function enterFs() {
+    if (!canFs || fsEl()) return;
+    try { const p = req.call(root, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  let wake = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && started) keepAwake(); });
+
+  let toastTimer = 0;
+  function toast(text) {
+    let t = document.querySelector('.pg-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'pg-toast'; t.setAttribute('aria-live', 'polite'); document.body.appendChild(t); }
+    t.textContent = text; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2000);
+  }
+
+  /* Start screen: the first tap turns on full screen (browsers only allow it from a tap). */
+  let started = false;
+  const start = document.getElementById('pgStart');
+  document.getElementById('pgTitle').textContent = document.title;
+  document.getElementById('pgTip').textContent = canFs
+    ? '全画面で遊べます。全画面を抜けたら、右上のボタンで戻せます。'
+    : (isTop && !standalone && /iPhone|iPod/.test(navigator.userAgent)
+        ? 'iPhone は「共有」→「ホーム画面に追加」で、全画面のアプリとして開けます。'
+        : '');
+  function begin() {
+    if (started) return;
+    started = true;
+    enterFs(); keepAwake();
+    start.hidden = true;
+  }
+  start.addEventListener('click', begin);
+
+  /* Full-screen toggle in the header, only where the browser supports it. */
+  if (canFs) {
+    const header = document.querySelector('header');
+    const b = document.createElement('button');
+    b.className = 'pg-fs'; b.id = 'pgFs';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+    const sync = () => { const on = !!fsEl(); b.setAttribute('aria-label', on ? '全画面をやめる' : '全画面にする'); b.setAttribute('aria-pressed', String(on)); };
+    b.addEventListener('click', () => { fsEl() ? exitFs() : enterFs(); });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+    if (header && header.lastElementChild) header.insertBefore(b, header.lastElementChild);
+  }
+
+  /* Touch lock: no page scrolling, pull-to-refresh, pinch zoom or long-press menu (double-tap zoom is off via touch-action in each game). */
+  document.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* Back guard (only when the game is its own page): the first "back" stays, a second one within 2s leaves. */
+  if (isTop) {
+    try {
+      history.pushState({ playguard: 1 }, '');
+      let armedAt = 0;
+      window.addEventListener('popstate', () => {
+        const now = Date.now();
+        if (now - armedAt < 2000) { history.back(); return; }
+        armedAt = now;
+        history.pushState({ playguard: 1 }, '');
+        toast('もう一度戻ると、ゲームを終了します');
+      });
+    } catch (e) {}
+  }
+})();
+</script>
+</body>
+</html>

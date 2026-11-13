@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>いろめくりタイル</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Zen+Antique&display=swap">
+<style>
+/* Layout: one-screen board — glazed tiles set in dark grout, color-cycle legend above, tool row below.
+   A single dark "tile wall" look on purpose: glaze colors read best against deep grout. */
+:root {
+  --bg: #16262b;
+  --grout: #0d181b;
+  --panel: #213740;
+  --fg: #eef3ef;
+  --muted: #9bb1b0;
+  --accent: #f2c14e;
+  --accent-ink: #2b1f00;
+  --t0: #e8735a;   /* terracotta */
+  --t1: #3fa7a0;   /* celadon */
+  --t2: #f2c14e;   /* ochre */
+  --display: "Zen Antique", "Hiragino Mincho ProN", "Yu Mincho", serif;
+  --font: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font);
+  -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none;
+  overflow: hidden; touch-action: manipulation;
+}
+.app {
+  height: 100%; box-sizing: border-box; max-width: 520px; margin: 0 auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 12px max(12px, env(safe-area-inset-bottom, 0px));
+}
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font-family: var(--display); font-size: 1.4rem; line-height: 1.1; }
+.brand small { display: block; font-family: var(--font); font-size: 0.64rem; font-weight: 700; color: var(--muted); letter-spacing: 0.16em; }
+.level { display: flex; align-items: center; gap: 2px; background: var(--panel); border-radius: 999px; padding: 3px; }
+.level span { min-width: 5.2em; text-align: center; font-weight: 900; font-variant-numeric: tabular-nums; }
+.level button { width: 32px; height: 32px; border-radius: 50%; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 1.15rem; cursor: pointer; }
+.level button:disabled { opacity: 0.25; cursor: default; }
+
+.info { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--muted); font-weight: 700; font-variant-numeric: tabular-nums; }
+.info b { color: var(--fg); font-size: 1rem; }
+.legend { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.8rem; color: var(--muted); font-weight: 700; }
+.legend i { width: 18px; height: 18px; border-radius: 4px; background: var(--c); box-shadow: inset 0 -3px 0 rgba(0,0,0,0.2); }
+.msg { min-height: 1.3em; text-align: center; font-weight: 700; font-size: 0.86rem; color: var(--accent); }
+
+main { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.board {
+  display: grid; gap: 6px; padding: 8px; background: var(--grout); border-radius: 14px;
+  width: min(100%, 52vh, 440px); aspect-ratio: 1; box-sizing: border-box;
+  box-shadow: 0 18px 40px rgba(0,0,0,0.35);
+}
+.tile {
+  border: 0; padding: 0; cursor: pointer; border-radius: 9px; position: relative;
+  background: var(--c); transition: background-color 0.28s ease;
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,0.18), inset 4px 4px 0 rgba(255,255,255,0.22);
+}
+.tile::after {
+  content: ""; position: absolute; left: 14%; top: 12%; width: 26%; height: 12%;
+  border-radius: 50%; background: rgba(255,255,255,0.35); filter: blur(1px);
+}
+.tile.flip { animation: flip 0.32s ease; }
+@keyframes flip { 0% { transform: perspective(300px) rotateY(0); } 50% { transform: perspective(300px) rotateY(90deg) scale(0.92); } 100% { transform: perspective(300px) rotateY(0); } }
+.tile.hint { outline: 3px solid var(--fg); outline-offset: 2px; animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse { 50% { outline-color: transparent; } }
+.tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.board.won .tile { animation: shine 0.7s ease both; animation-delay: calc(var(--d) * 35ms); }
+@keyframes shine { 50% { filter: brightness(1.45); transform: scale(0.94); } }
+
+.tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tool { border: 0; border-radius: 14px; padding: 12px 4px; background: var(--panel); color: var(--fg); font: inherit; font-weight: 700; font-size: 0.86rem; cursor: pointer; }
+.tool:disabled { opacity: 0.35; cursor: default; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: rgba(6, 14, 16, 0.6);
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.card { background: var(--panel); border-radius: 22px; padding: 24px; width: 100%; max-width: 330px; box-sizing: border-box; text-align: center; animation: cardIn 0.35s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes cardIn { from { transform: scale(0.75); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.stars { font-size: 2.3rem; letter-spacing: 0.1em; color: var(--grout); }
+.stars .on { color: var(--accent); }
+.card h2 { font-family: var(--display); font-weight: 400; font-size: 1.7rem; margin: 2px 0 8px; }
+.card p { margin: 0 0 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.card-btns { display: flex; gap: 8px; justify-content: center; }
+.cta { border: 0; border-radius: 999px; padding: 12px 22px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 900; font-size: 1rem; cursor: pointer; }
+.cta.ghost { background: transparent; color: var(--fg); box-shadow: inset 0 0 0 1.5px var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tile, .card, .board.won .tile, .tile.hint { transition: none !important; animation: none !important; }
+}
+</style>
+<style id="playguard-css">
+/* Full-screen start screen and touch lock, shared by all games. */
+html, body { overscroll-behavior: none; }
+body { -webkit-touch-callout: none; }
+.pg-start {
+  position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: var(--bg); color: inherit; text-align: center; cursor: pointer;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px));
+}
+.pg-start h1 { margin: 0; font-size: 2rem; font-weight: 900; letter-spacing: 0.04em; text-wrap: balance; }
+.pg-start .pg-go {
+  border: 0; border-radius: 999px; padding: 16px 36px; background: var(--accent); color: var(--accent-ink);
+  font: inherit; font-weight: 900; font-size: 1.15rem; cursor: pointer; animation: pg-pulse 1.6s ease-in-out infinite;
+}
+.pg-start p { margin: 0; max-width: 30em; font-size: 0.85rem; opacity: 0.7; line-height: 1.6; }
+@keyframes pg-pulse { 50% { transform: scale(1.05); } }
+.pg-fs {
+  margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 0; flex: none;
+  background: rgba(128, 128, 128, 0.18); color: inherit; display: grid; place-items: center; cursor: pointer;
+}
+.pg-fs:focus-visible, .pg-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 120;
+  background: rgba(20, 20, 24, 0.88); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
+  pointer-events: none; white-space: nowrap;
+}
+@media (max-width: 440px) {
+  header { gap: 8px; }
+  header .brand { font-size: 1.1rem; white-space: nowrap; }
+  header .level span { min-width: 4.2em; }
+  header .level button { width: 28px; }
+  .pg-fs, .sound { width: 36px; height: 36px; }
+  .head-right { gap: 6px; }
+  header .brand small { letter-spacing: 0.06em; }
+}
+@media (prefers-reduced-motion: reduce) { .pg-start .pg-go { animation: none; } }
+</style>
+</head>
+<body>
+<div class="pg-start" id="pgStart" role="dialog" aria-label="スタート">
+  <h1 id="pgTitle"></h1>
+  <button class="pg-go" id="pgGo">タップしてはじめる</button>
+  <p id="pgTip"></p>
+</div>
+<div class="app">
+  <header>
+    <div class="brand">いろめくりタイル<small>TILE FLIP PUZZLE</small></div>
+    <div class="level">
+      <button id="prev" aria-label="前のレベル">‹</button>
+      <span id="lvl">レベル 1</span>
+      <button id="next" aria-label="次のレベル">›</button>
+    </div>
+  </header>
+  <div class="info"><span>目標 <b id="par">2</b> 手</span><span class="legend" id="legend"></span><span><b id="moves">0</b> 手</span></div>
+  <div class="msg" id="msg" aria-live="polite">押したタイルと上下左右が、次の色に変わります</div>
+  <main><div class="board" id="board"></div></main>
+  <div class="tools">
+    <button class="tool" id="undo">1手戻す</button>
+    <button class="tool" id="hint">ヒント</button>
+    <button class="tool" id="restart">やり直し</button>
+  </div>
+</div>
+
+<div class="overlay" id="result" hidden>
+  <div class="card">
+    <div class="stars" id="stars"></div>
+    <h2 id="resTitle">そろった！</h2>
+    <p id="resText">3 手（目標 3 手）</p>
+    <div class="card-btns">
+      <button class="cta ghost" id="retry">もう一度</button>
+      <button class="cta" id="nextBtn">次のレベルへ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const COLORS = ['var(--t0)', 'var(--t1)', 'var(--t2)'];
+  const NAMES = ['赤土', '青磁', '黄土'];
+  const $ = id => document.getElementById(id);
+
+  /* ---------- level settings ---------- */
+  function spec(lv) {
+    if (lv <= 2) return { n: 3, k: 2, min: 2, max: 3 };
+    if (lv <= 5) return { n: 4, k: 2, min: 3, max: 5 };
+    if (lv <= 8) return { n: 3, k: 3, min: 3, max: 5 };
+    if (lv <= 12) return { n: 5, k: 2, min: 5, max: 8 };
+    if (lv <= 16) return { n: 4, k: 3, min: 5, max: 9 };
+    if (lv <= 20) return { n: 6, k: 2, min: 7, max: 12 };
+    return { n: 5, k: 3, min: 8, max: 14 };
+  }
+
+  /* ---------- exact solver: linear algebra mod k (k = 2 or 3, both prime) ---------- */
+  // Pressing cell j adds 1 (mod k) to j and its 4 neighbours. Find press counts x with A·x = target - state.
+  function neighbours(n, j) {
+    const r = Math.floor(j / n), c = j % n, out = [j];
+    if (r > 0) out.push(j - n);
+    if (r < n - 1) out.push(j + n);
+    if (c > 0) out.push(j - 1);
+    if (c < n - 1) out.push(j + 1);
+    return out;
+  }
+  const inv = (a, k) => { for (let x = 1; x < k; x++) if ((a * x) % k === 1) return x; return 0; };
+  function solveFor(state, n, k, color) {
+    const N = n * n;
+    const M = [];
+    for (let i = 0; i < N; i++) {
+      const row = new Array(N + 1).fill(0);
+      for (let j = 0; j < N; j++) if (neighbours(n, j).includes(i)) row[j] = 1;
+      row[N] = ((color - state[i]) % k + k) % k;
+      M.push(row);
+    }
+    const pivotCol = [];
+    let r = 0;
+    for (let c = 0; c < N && r < N; c++) {
+      let p = -1;
+      for (let i = r; i < N; i++) if (M[i][c] % k) { p = i; break; }
+      if (p < 0) continue;
+      [M[r], M[p]] = [M[p], M[r]];
+      const iv = inv(M[r][c], k);
+      for (let j = 0; j <= N; j++) M[r][j] = (M[r][j] * iv) % k;
+      for (let i = 0; i < N; i++) {
+        if (i !== r && M[i][c]) {
+          const f = M[i][c];
+          for (let j = 0; j <= N; j++) M[i][j] = ((M[i][j] - f * M[r][j]) % k + k) % k;
+        }
+      }
+      pivotCol.push(c); r++;
+    }
+    for (let i = r; i < N; i++) if (M[i][N]) return null; // no solution for this color
+    const free = [];
+    for (let c = 0; c < N; c++) if (!pivotCol.includes(c)) free.push(c);
+    // Try every setting of the free variables (the null space is small) and keep the fewest presses.
+    let best = null;
+    const total = Math.pow(k, free.length);
+    for (let m = 0; m < total; m++) {
+      const x = new Array(N).fill(0);
+      let t = m;
+      for (const f of free) { x[f] = t % k; t = Math.floor(t / k); }
+      for (let i = 0; i < pivotCol.length; i++) {
+        let v = M[i][N];
+        for (const f of free) v -= M[i][f] * x[f];
+        x[pivotCol[i]] = ((v % k) + k) % k;
+      }
+      const cost = x.reduce((a, b) => a + b, 0);
+      if (!best || cost < best.cost) best = { cost, x };
+    }
+    return best;
+  }
+  function solve(state, n, k) {
+    let best = null;
+    for (let c = 0; c < k; c++) {
+      const s = solveFor(state, n, k, c);
+      if (s && (!best || s.cost < best.cost)) best = s;
+    }
+    return best;
+  }
+
+  /* ---------- seeded level generation (scramble from a solved board) ---------- */
+  function rng(seed) {
+    return () => {
+      seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function press(state, n, k, j) { for (const i of neighbours(n, j)) state[i] = (state[i] + 1) % k; }
+  function makeLevel(lv) {
+    const { n, k, min, max } = spec(lv);
+    let fallback = null;
+    for (let attempt = 0; attempt < 200; attempt++) {
+      const r = rng(lv * 7717 + attempt * 31337);
+      const base = Math.floor(r() * k);
+      const state = new Array(n * n).fill(base);
+      const taps = min + Math.floor(r() * (max - min + 1));
+      for (let t = 0; t < taps; t++) press(state, n, k, Math.floor(r() * n * n));
+      const s = solve(state, n, k);
+      if (!s || s.cost === 0) continue;
+      fallback = { n, k, state, par: s.cost };
+      if (s.cost >= min && s.cost <= max) return fallback;
+    }
+    return fallback;
+  }
+
+  /* ---------- state ---------- */
+  let level = 1, maxLevel = 1, stars = {};
+  let cfg = null, state = [], history = [], moves = 0, hintTimer = 0;
+  try {
+    const s = JSON.parse(localStorage.getItem('iromekuri') || '{}');
+    if (s.maxLevel) { maxLevel = s.maxLevel; level = s.level || 1; stars = s.stars || {}; }
+  } catch (e) {}
+  const save = () => { try { localStorage.setItem('iromekuri', JSON.stringify({ level, maxLevel, stars })); } catch (e) {} };
+
+  const board = $('board');
+  function build() {
+    board.innerHTML = '';
+    board.classList.remove('won');
+    board.style.gridTemplateColumns = `repeat(${cfg.n}, 1fr)`;
+    board.style.gap = cfg.n >= 6 ? '4px' : '6px';
+    state.forEach((v, j) => {
+      const b = document.createElement('button');
+      b.className = 'tile';
+      b.style.setProperty('--d', j);
+      b.setAttribute('aria-label', `${Math.floor(j / cfg.n) + 1}行 ${j % cfg.n + 1}列`);
+      b.onclick = () => tap(j);
+      board.appendChild(b);
+    });
+    paint();
+    // Show the cycle, ending on the first color again: A→B→A or A→B→C→A.
+    $('legend').innerHTML = [...Array(cfg.k).keys(), 0].map(i => `<i style="--c:${COLORS[i]}" title="${NAMES[i]}"></i>`).join('→');
+  }
+  function paint(changed) {
+    const tiles = board.children;
+    state.forEach((v, j) => {
+      tiles[j].style.setProperty('--c', COLORS[v]);
+      tiles[j].setAttribute('aria-label', `${Math.floor(j / cfg.n) + 1}行 ${j % cfg.n + 1}列 ${NAMES[v]}`);
+      if (changed && changed.includes(j)) {
+        tiles[j].classList.remove('flip'); void tiles[j].offsetWidth; tiles[j].classList.add('flip');
+      }
+    });
+    $('lvl').textContent = `レベル ${level}`;
+    $('par').textContent = cfg.par;
+    $('moves').textContent = moves;
+    $('prev').disabled = level <= 1;
+    $('next').disabled = level >= maxLevel;
+    $('undo').disabled = !history.length;
+  }
+  function clearHint() { clearTimeout(hintTimer); board.querySelectorAll('.hint').forEach(t => t.classList.remove('hint')); }
+
+  let done = false;
+  function tap(j) {
+    if (done) return;
+    clearHint();
+    history.push(state.slice());
+    press(state, cfg.n, cfg.k, j);
+    moves++;
+    paint(neighbours(cfg.n, j));
+    try { navigator.vibrate && navigator.vibrate(8); } catch (e) {}
+    if (state.every(v => v === state[0])) win();
+  }
+  function win() {
+    done = true;
+    const s = moves <= cfg.par ? 3 : moves <= cfg.par + 2 ? 2 : 1;
+    stars[level] = Math.max(stars[level] || 0, s);
+    if (level >= maxLevel) maxLevel = level + 1;
+    save();
+    board.classList.add('won');
+    setTimeout(() => {
+      $('stars').innerHTML = [0, 1, 2].map(i => `<span class="${i < s ? 'on' : ''}">★</span>`).join('');
+      $('resTitle').textContent = s === 3 ? 'かんぺき！' : 'そろった！';
+      $('resText').textContent = `${moves} 手（目標 ${cfg.par} 手）`;
+      $('result').hidden = false;
+      $('nextBtn').focus();
+      paint();
+    }, 650);
+  }
+
+  $('undo').onclick = () => { if (!history.length || done) return; clearHint(); state = history.pop(); moves--; paint(); };
+  $('restart').onclick = () => startLevel(level);
+  $('hint').onclick = () => {
+    if (done) return;
+    clearHint();
+    const s = solve(state, cfg.n, cfg.k);
+    if (!s) return;
+    const j = s.x.findIndex(v => v > 0);
+    board.children[j].classList.add('hint');
+    $('msg').textContent = `光っているタイルを押してみて（ここから最短 ${s.cost} 手）`;
+    hintTimer = setTimeout(clearHint, 4000);
+  };
+  $('retry').onclick = () => startLevel(level);
+  $('nextBtn').onclick = () => startLevel(level + 1);
+  $('prev').onclick = () => { if (level > 1) startLevel(level - 1); };
+  $('next').onclick = () => { if (level < maxLevel) startLevel(level + 1); };
+
+  function startLevel(lv) {
+    level = lv; cfg = makeLevel(lv);
+    state = cfg.state.slice(); history = []; moves = 0; done = false;
+    $('result').hidden = true;
+    $('msg').textContent = cfg.k === 3 && lv === 6
+      ? '3色になりました。押すたびに 赤土→青磁→黄土 の順に変わります'
+      : '押したタイルと上下左右が、次の色に変わります';
+    save();
+    build();
+  }
+
+  /* ---------- boot (keeps progress across live updates in the viewer) ---------- */
+  function start(data) {
+    if (data && data.state) {
+      level = data.level; maxLevel = data.maxLevel; stars = data.stars || {};
+      cfg = makeLevel(level); state = data.state; history = data.history || []; moves = data.moves || 0; done = false;
+      build();
+    } else startLevel(level);
+  }
+  window.claude?.hot?.snapshot?.(() => ({ level, maxLevel, stars, state, history, moves }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+<script id="playguard-js">
+(() => {
+  const root = document.documentElement;
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+  const canFs = !!req && (document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const isTop = (() => { try { return window.top === window; } catch (e) { return false; } })();
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+  function enterFs() {
+    if (!canFs || fsEl()) return;
+    try { const p = req.call(root, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  let wake = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && started) keepAwake(); });
+
+  let toastTimer = 0;
+  function toast(text) {
+    let t = document.querySelector('.pg-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'pg-toast'; t.setAttribute('aria-live', 'polite'); document.body.appendChild(t); }
+    t.textContent = text; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2000);
+  }
+
+  /* Start screen: the first tap turns on full screen (browsers only allow it from a tap). */
+  let started = false;
+  const start = document.getElementById('pgStart');
+  document.getElementById('pgTitle').textContent = document.title;
+  document.getElementById('pgTip').textContent = canFs
+    ? '全画面で遊べます。全画面を抜けたら、右上のボタンで戻せます。'
+    : (isTop && !standalone && /iPhone|iPod/.test(navigator.userAgent)
+        ? 'iPhone は「共有」→「ホーム画面に追加」で、全画面のアプリとして開けます。'
+        : '');
+  function begin() {
+    if (started) return;
+    started = true;
+    enterFs(); keepAwake();
+    start.hidden = true;
+  }
+  start.addEventListener('click', begin);
+
+  /* Full-screen toggle in the header, only where the browser supports it. */
+  if (canFs) {
+    const header = document.querySelector('header');
+    const b = document.createElement('button');
+    b.className = 'pg-fs'; b.id = 'pgFs';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+    const sync = () => { const on = !!fsEl(); b.setAttribute('aria-label', on ? '全画面をやめる' : '全画面にする'); b.setAttribute('aria-pressed', String(on)); };
+    b.addEventListener('click', () => { fsEl() ? exitFs() : enterFs(); });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+    if (header && header.lastElementChild) header.insertBefore(b, header.lastElementChild);
+  }
+
+  /* Touch lock: no page scrolling, pull-to-refresh, pinch zoom or long-press menu (double-tap zoom is off via touch-action in each game). */
+  document.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* Back guard (only when the game is its own page): the first "back" stays, a second one within 2s leaves. */
+  if (isTop) {
+    try {
+      history.pushState({ playguard: 1 }, '');
+      let armedAt = 0;
+      window.addEventListener('popstate', () => {
+        const now = Date.now();
+        if (now - armedAt < 2000) { history.back(); return; }
+        armedAt = now;
+        history.pushState({ playguard: 1 }, '');
+        toast('もう一度戻ると、ゲームを終了します');
+      });
+    } catch (e) {}
+  }
+})();
+</script>
+</body>
+</html>
