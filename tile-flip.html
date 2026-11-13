@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>いろめくりタイル</title>
 <meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Zen+Antique&display=swap">
@@ -101,8 +104,50 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .tile, .card, .board.won .tile, .tile.hint { transition: none !important; animation: none !important; }
 }
 </style>
+<style id="playguard-css">
+/* Full-screen start screen and touch lock, shared by all games. */
+html, body { overscroll-behavior: none; }
+body { -webkit-touch-callout: none; }
+.pg-start {
+  position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  background: var(--bg); color: inherit; text-align: center; cursor: pointer;
+  padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px));
+}
+.pg-start h1 { margin: 0; font-size: 2rem; font-weight: 900; letter-spacing: 0.04em; text-wrap: balance; }
+.pg-start .pg-go {
+  border: 0; border-radius: 999px; padding: 16px 36px; background: var(--accent); color: var(--accent-ink);
+  font: inherit; font-weight: 900; font-size: 1.15rem; cursor: pointer; animation: pg-pulse 1.6s ease-in-out infinite;
+}
+.pg-start p { margin: 0; max-width: 30em; font-size: 0.85rem; opacity: 0.7; line-height: 1.6; }
+@keyframes pg-pulse { 50% { transform: scale(1.05); } }
+.pg-fs {
+  margin-left: auto; width: 40px; height: 40px; border-radius: 50%; border: 0; flex: none;
+  background: rgba(128, 128, 128, 0.18); color: inherit; display: grid; place-items: center; cursor: pointer;
+}
+.pg-fs:focus-visible, .pg-go:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 120;
+  background: rgba(20, 20, 24, 0.88); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 0.9rem; font-weight: 700;
+  pointer-events: none; white-space: nowrap;
+}
+@media (max-width: 440px) {
+  header { gap: 8px; }
+  header .brand { font-size: 1.1rem; white-space: nowrap; }
+  header .level span { min-width: 4.2em; }
+  header .level button { width: 28px; }
+  .pg-fs, .sound { width: 36px; height: 36px; }
+  .head-right { gap: 6px; }
+  header .brand small { letter-spacing: 0.06em; }
+}
+@media (prefers-reduced-motion: reduce) { .pg-start .pg-go { animation: none; } }
+</style>
 </head>
 <body>
+<div class="pg-start" id="pgStart" role="dialog" aria-label="スタート">
+  <h1 id="pgTitle"></h1>
+  <button class="pg-go" id="pgGo">タップしてはじめる</button>
+  <p id="pgTip"></p>
+</div>
 <div class="app">
   <header>
     <div class="brand">いろめくりタイル<small>TILE FLIP PUZZLE</small></div>
@@ -355,6 +400,86 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   }
   window.claude?.hot?.snapshot?.(() => ({ level, maxLevel, stars, state, history, moves }));
   window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+<script id="playguard-js">
+(() => {
+  const root = document.documentElement;
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const exitFs = () => (document.exitFullscreen || document.webkitExitFullscreen || (() => {})).call(document);
+  const canFs = !!req && (document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const isTop = (() => { try { return window.top === window; } catch (e) { return false; } })();
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+  function enterFs() {
+    if (!canFs || fsEl()) return;
+    try { const p = req.call(root, { navigationUI: 'hide' }); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+  }
+  let wake = null;
+  async function keepAwake() {
+    try { if (navigator.wakeLock && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && started) keepAwake(); });
+
+  let toastTimer = 0;
+  function toast(text) {
+    let t = document.querySelector('.pg-toast');
+    if (!t) { t = document.createElement('div'); t.className = 'pg-toast'; t.setAttribute('aria-live', 'polite'); document.body.appendChild(t); }
+    t.textContent = text; t.hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2000);
+  }
+
+  /* Start screen: the first tap turns on full screen (browsers only allow it from a tap). */
+  let started = false;
+  const start = document.getElementById('pgStart');
+  document.getElementById('pgTitle').textContent = document.title;
+  document.getElementById('pgTip').textContent = canFs
+    ? '全画面で遊べます。全画面を抜けたら、右上のボタンで戻せます。'
+    : (isTop && !standalone && /iPhone|iPod/.test(navigator.userAgent)
+        ? 'iPhone は「共有」→「ホーム画面に追加」で、全画面のアプリとして開けます。'
+        : '');
+  function begin() {
+    if (started) return;
+    started = true;
+    enterFs(); keepAwake();
+    start.hidden = true;
+  }
+  start.addEventListener('click', begin);
+
+  /* Full-screen toggle in the header, only where the browser supports it. */
+  if (canFs) {
+    const header = document.querySelector('header');
+    const b = document.createElement('button');
+    b.className = 'pg-fs'; b.id = 'pgFs';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+    const sync = () => { const on = !!fsEl(); b.setAttribute('aria-label', on ? '全画面をやめる' : '全画面にする'); b.setAttribute('aria-pressed', String(on)); };
+    b.addEventListener('click', () => { fsEl() ? exitFs() : enterFs(); });
+    document.addEventListener('fullscreenchange', sync);
+    document.addEventListener('webkitfullscreenchange', sync);
+    sync();
+    if (header && header.lastElementChild) header.insertBefore(b, header.lastElementChild);
+  }
+
+  /* Touch lock: no page scrolling, pull-to-refresh, pinch zoom or long-press menu (double-tap zoom is off via touch-action in each game). */
+  document.addEventListener('touchmove', e => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault()));
+  document.addEventListener('contextmenu', e => e.preventDefault());
+
+  /* Back guard (only when the game is its own page): the first "back" stays, a second one within 2s leaves. */
+  if (isTop) {
+    try {
+      history.pushState({ playguard: 1 }, '');
+      let armedAt = 0;
+      window.addEventListener('popstate', () => {
+        const now = Date.now();
+        if (now - armedAt < 2000) { history.back(); return; }
+        armedAt = now;
+        history.pushState({ playguard: 1 }, '');
+        toast('もう一度戻ると、ゲームを終了します');
+      });
+    } catch (e) {}
+  }
 })();
 </script>
 </body>
